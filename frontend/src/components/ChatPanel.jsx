@@ -8,9 +8,11 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [isListening, setIsListening] = useState(false)
+  const [voiceError, setVoiceError] = useState('')
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const recognitionRef = useRef(null)
+  const finalTranscriptRef = useRef('')
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -27,28 +29,55 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
     recognition.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
 
     recognition.onresult = (event) => {
-      const transcript = Array.from(event.results)
-        .map((r) => r[0].transcript)
-        .join('')
-      setInput(transcript)
+      let interim = ''
+      let final = ''
+      for (let i = 0; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript
+        if (event.results[i].isFinal) final += t
+        else interim += t
+      }
+      const text = final || interim
+      setInput(text)
+      finalTranscriptRef.current = final
     }
 
-    recognition.onend = () => setIsListening(false)
-    recognition.onerror = () => setIsListening(false)
+    recognition.onend = () => {
+      setIsListening(false)
+      if (finalTranscriptRef.current.trim()) {
+        setInput(finalTranscriptRef.current.trim())
+      }
+    }
+
+    recognition.onerror = (event) => {
+      setIsListening(false)
+      if (event.error === 'not-allowed') {
+        setVoiceError('Microphone permission denied. Allow mic access and try again.')
+      } else if (event.error === 'no-speech') {
+        setVoiceError('No speech detected. Tap the mic and speak.')
+      } else {
+        setVoiceError('')
+      }
+    }
 
     recognitionRef.current = recognition
-    return () => recognition.abort()
+    return () => { try { recognition.abort() } catch {} }
   }, [lang])
 
   const toggleVoice = useCallback(() => {
     if (!recognitionRef.current) return
+    setVoiceError('')
+    finalTranscriptRef.current = ''
     if (isListening) {
       recognitionRef.current.stop()
       setIsListening(false)
     } else {
       recognitionRef.current.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
-      recognitionRef.current.start()
-      setIsListening(true)
+      try {
+        recognitionRef.current.start()
+        setIsListening(true)
+      } catch {
+        setVoiceError('Mic busy. Wait a moment and try again.')
+      }
     }
   }, [isListening, lang])
 
@@ -182,6 +211,9 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
       </div>
 
       <form onSubmit={handleSubmit} className="p-3 border-t border-paddy-light/30 bg-white/50">
+        {voiceError && (
+          <p className="text-xs text-laterite bg-laterite-light/50 rounded-lg px-3 py-1.5 mb-2">{voiceError}</p>
+        )}
         {imagePreview && (
           <div className="mb-2 flex items-center gap-2">
             <img src={imagePreview} alt="Preview" className="h-14 rounded border border-paddy-light" />

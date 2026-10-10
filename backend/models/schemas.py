@@ -72,3 +72,19 @@ class DiagnoseResponse(BaseModel):
     confidence: str | None = None
     treatment: list[str] = Field(default_factory=list)
     preventive_measures: list[str] = Field(default_factory=list)
+
+
+# --- Scheme Explorer Hub ---
+
+class SchemeMatchRequest(BaseModel):
+    district: str | None = None
+    soil_type: str | None = None
+    acreage: float | None = None
+    crop_type: str | None = None
+    category_filter: str | None = None
+
+
+class SchemeDraftRequest(BaseModel):
+    scheme_id: str
+    farmer_name: str | None = None
+    district: str | None = None

@@ -4,6 +4,7 @@ import Header from './components/Header'
 import ChatPanel from './components/ChatPanel'
 import AgentTracker from './components/AgentTracker'
 import ArchitectureModal from './components/ArchitectureModal'
+import SchemeExplorer from './pages/SchemeExplorer'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import { sendChatMessage } from './api'
@@ -15,6 +16,7 @@ const delay = (ms) => new Promise((r) => setTimeout(r, ms))
 function Dashboard() {
   const { user } = useAuth()
   const [lang, setLang] = useState(user?.preferred_language === 'Tamil' ? 'ta' : 'en')
+  const [view, setView] = useState('chat')
   const [showArch, setShowArch] = useState(false)
   const [messages, setMessages] = useState([])
   const [trackerSteps, setTrackerSteps] = useState([])
@@ -116,13 +118,43 @@ function Dashboard() {
         onLangChange={() => setLang((l) => (l === 'en' ? 'ta' : 'en'))}
         onShowArch={() => setShowArch(true)}
       />
-      <main className="flex-1 flex overflow-hidden">
-        <ChatPanel messages={messages} onSend={handleSend} isLoading={isLoading} lang={lang} />
-        <AgentTracker
-          steps={trackerSteps} schemeCards={schemeCards} toolCalls={rawToolCalls}
-          agentReply={lastReply} esevaDrafts={esevaDrafts} lang={lang}
-        />
-      </main>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-paddy-light/40 bg-white/50 px-5">
+        <button
+          onClick={() => setView('chat')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            view === 'chat'
+              ? 'border-paddy text-paddy-dark'
+              : 'border-transparent text-ink-muted hover:text-ink-light'
+          }`}
+        >
+          {t.chatTab}
+        </button>
+        <button
+          onClick={() => setView('schemes')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            view === 'schemes'
+              ? 'border-paddy text-paddy-dark'
+              : 'border-transparent text-ink-muted hover:text-ink-light'
+          }`}
+        >
+          {t.schemesTab}
+        </button>
+      </div>
+
+      {view === 'chat' ? (
+        <main className="flex-1 flex overflow-hidden">
+          <ChatPanel messages={messages} onSend={handleSend} isLoading={isLoading} lang={lang} />
+          <AgentTracker
+            steps={trackerSteps} schemeCards={schemeCards} toolCalls={rawToolCalls}
+            agentReply={lastReply} esevaDrafts={esevaDrafts} lang={lang}
+          />
+        </main>
+      ) : (
+        <SchemeExplorer lang={lang} />
+      )}
+
       {showArch && <ArchitectureModal lang={lang} onClose={() => setShowArch(false)} />}
     </div>
   )

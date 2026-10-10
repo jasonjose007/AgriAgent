@@ -79,3 +79,15 @@ export async function sendAgentChat(message, imageFile = null) {
   if (imageFile) formData.append('image', imageFile)
   return apiPost('/agent/chat', formData, true)
 }
+
+export async function fetchSchemeCategories() {
+  return apiGet('/schemes/categories')
+}
+
+export async function matchSchemes(filters) {
+  return apiPost('/schemes/match-direct', filters)
+}
+
+export async function generateSchemeDraft(data) {
+  return apiPost('/schemes/generate-draft', data)
+}

@@ -14,9 +14,10 @@ from sqlalchemy.orm import Session
 
 from database import engine, get_db, Base
 from models.db_models import AgentSessionLog
-from models.schemas import AgentResponse, ChatRequest, DiagnoseResponse, UserProfile
+from models.schemas import AgentResponse, ChatRequest, DiagnoseResponse, UserProfile, SchemeMatchRequest, SchemeDraftRequest
 from agent.core import AgriAgent
-from agent.tools import match_agri_schemes, fetch_mandi_and_weather, diagnose_crop_disease
+from agent.tools import match_agri_schemes, match_agri_schemes_advanced, fetch_mandi_and_weather, diagnose_crop_disease, generate_official_draft
+from data.schemes import SCHEME_CATEGORIES, AGRI_SCHEMES
 from auth import router as auth_router, get_current_user, require_user
 from config import GOOGLE_API_KEY
 from google import genai
@@ -165,7 +166,57 @@ async def diagnose_endpoint(
 
 
 # ---------------------------------------------------------------------------
-# Quick non-agentic lookups
+# Scheme Explorer Hub — dedicated non-conversational scheme endpoints
+# ---------------------------------------------------------------------------
+
+@app.get("/api/schemes/categories")
+async def scheme_categories():
+    return SCHEME_CATEGORIES
+
+
+@app.post("/api/schemes/match-direct")
+async def scheme_match_direct(
+    req: SchemeMatchRequest,
+    user=Depends(get_current_user),
+):
+    district = req.district or (user.district if user else "Tamil Nadu")
+    soil_type = req.soil_type or (user.soil_type if user else "")
+    acreage = req.acreage or (user.acreage if user else 2.0)
+    crop_type = req.crop_type or (user.primary_crop if user else "rice")
+    category_filter = req.category_filter or ""
+
+    return match_agri_schemes_advanced(
+        crop_type=crop_type,
+        acreage=acreage,
+        district=district,
+        soil_type=soil_type,
+        category_filter=category_filter,
+    )
+
+
+@app.post("/api/schemes/generate-draft")
+async def scheme_generate_draft(
+    req: SchemeDraftRequest,
+    user=Depends(get_current_user),
+):
+    farmer_name = req.farmer_name or (user.full_name if user else "Farmer")
+    district = req.district or (user.district if user else "Tamil Nadu")
+
+    scheme = next((s for s in AGRI_SCHEMES if s["scheme_id"] == req.scheme_id), None)
+    if not scheme:
+        raise HTTPException(status_code=404, detail=f"Scheme '{req.scheme_id}' not found")
+
+    return generate_official_draft(
+        farmer_name=farmer_name,
+        district=district,
+        scheme_name=scheme["name"],
+        scheme_id=scheme["scheme_id"],
+        document_checklist=", ".join(scheme["documents_required"]),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Quick non-agentic lookups (legacy)
 # ---------------------------------------------------------------------------
 
 @app.get("/api/schemes")

@@ -12,7 +12,7 @@ from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
 
-from data.schemes import AGRI_SCHEMES, MANDI_PRICES, WEATHER_DATA, SOIL_WEATHER_ADVISORY
+from data.schemes import AGRI_SCHEMES, SCHEME_CATEGORIES, MANDI_PRICES, WEATHER_DATA, SOIL_WEATHER_ADVISORY
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -161,6 +161,119 @@ def generate_official_draft(farmer_name: str, district: str, scheme_name: str, s
     }
 
 
+TN_DISTRICTS = {
+    "tamil nadu", "tamilnadu", "tn", "thanjavur", "coimbatore", "madurai",
+    "salem", "erode", "tiruchirappalli", "tirunelveli", "chennai",
+    "kanchipuram", "vellore", "dindigul", "cuddalore", "nagapattinam",
+    "theni", "sivaganga",
+}
+
+
+def _is_tn(district: str) -> bool:
+    return any(kw in district.lower().strip() for kw in TN_DISTRICTS)
+
+
+def match_agri_schemes_advanced(
+    crop_type: str, acreage: float, district: str, soil_type: str,
+    category_filter: str = "",
+) -> dict:
+    """Score and rank all government agriculture schemes for a farmer.
+    Returns a match_score (0-100) per scheme based on weighted factors.
+
+    Args:
+        crop_type: Primary crop (e.g. rice, sugarcane, cotton).
+        acreage: Land area in acres.
+        district: District name in Tamil Nadu.
+        soil_type: Soil type (e.g. alluvial, red_soil, black_cotton).
+        category_filter: Optional category id to filter (irrigation, machinery, insurance, soil).
+    """
+    crop = crop_type.lower().strip()
+    soil_lower = soil_type.lower().strip().replace(" ", "_")
+    is_tamil_nadu = _is_tn(district)
+    cat = category_filter.lower().strip() if category_filter else ""
+
+    results = []
+    for scheme in AGRI_SCHEMES:
+        if cat and scheme.get("category", "") != cat:
+            continue
+
+        # --- Weighted scoring (crop 30%, soil 25%, acreage 20%, region 25%) ---
+        crop_score = 0
+        eligible_crops = scheme["eligible_crops"]
+        if eligible_crops == "all":
+            crop_score = 100
+        elif crop in eligible_crops.split(","):
+            crop_score = 100
+        else:
+            crop_score = 0
+
+        soil_rel = scheme.get("soil_relevance", "all")
+        if soil_rel == "all":
+            soil_score = 80
+        elif soil_lower in soil_rel.split(","):
+            soil_score = 100
+        else:
+            soil_score = 30
+
+        max_ac = scheme.get("max_acreage")
+        if max_ac is None:
+            acreage_score = 90
+        elif acreage <= max_ac:
+            acreage_score = 100
+        elif acreage <= max_ac * 1.2:
+            acreage_score = 50
+        else:
+            acreage_score = 0
+
+        region = scheme["eligible_regions"]
+        if region == "all":
+            region_score = 85
+        elif region == "tamil_nadu" and is_tamil_nadu:
+            region_score = 100
+        else:
+            region_score = 0
+
+        total = int(crop_score * 0.30 + soil_score * 0.25 + acreage_score * 0.20 + region_score * 0.25)
+
+        if total < 20:
+            continue
+
+        reasons = []
+        if crop_score == 100:
+            reasons.append(f"Crop '{crop_type}' is eligible")
+        if soil_score >= 80:
+            reasons.append(f"Soil type '{soil_type}' is {'highly ' if soil_score == 100 else ''}compatible")
+        if acreage_score >= 90:
+            reasons.append(f"{acreage} acres within limit")
+        if region_score >= 85:
+            reasons.append(f"Available in {district}")
+
+        soil_notes = scheme.get("soil_note", {})
+        soil_tip = soil_notes.get(soil_lower, "")
+
+        results.append({
+            "scheme_id": scheme["scheme_id"],
+            "scheme_name": scheme["name"],
+            "provider": scheme.get("provider", "Central"),
+            "category": scheme.get("category", ""),
+            "match_score": total,
+            "eligibility_reasons": reasons,
+            "subsidy_benefit_summary": scheme["benefit"],
+            "required_documents": scheme["documents_required"],
+            "soil_recommendation": soil_tip or "Applicable to all soil types.",
+            "apply_url": scheme.get("apply_url", ""),
+        })
+
+    results.sort(key=lambda s: s["match_score"], reverse=True)
+
+    return {
+        "query": {"crop_type": crop_type, "acreage": acreage, "district": district, "soil_type": soil_type, "category_filter": category_filter},
+        "matched_schemes": results,
+        "total_matches": len(results),
+        "generated_at": datetime.now(IST).isoformat(),
+    }
+
+
 def _get_msp_note(commodity: str, modal_price: float) -> str:
     msp_table = {"rice": 2300, "paddy": 2300, "wheat": 2275, "cotton": 7121, "groundnut": 6377, "sugarcane": 315, "maize": 2090}
     msp = msp_table.get(commodity)
@@ -212,10 +325,11 @@ def diagnose_crop_disease(client: genai.Client, image_bytes: bytes, mime_type: s
     return diagnosis
 
 
-AGENT_TOOLS = [match_agri_schemes, fetch_mandi_and_weather, generate_official_draft]
+AGENT_TOOLS = [match_agri_schemes, fetch_mandi_and_weather, generate_official_draft, match_agri_schemes_advanced]
 
 TOOL_DISPATCHER: dict = {
     "match_agri_schemes": match_agri_schemes,
     "fetch_mandi_and_weather": fetch_mandi_and_weather,
     "generate_official_draft": generate_official_draft,
+    "match_agri_schemes_advanced": match_agri_schemes_advanced,
 }

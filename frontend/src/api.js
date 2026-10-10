@@ -59,11 +59,18 @@ export async function fetchProfile() {
   return apiGet('/auth/me')
 }
 
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ])
+}
+
 export async function sendChatMessage(message, imageFile = null) {
   const formData = new FormData()
   formData.append('message', message)
   if (imageFile) formData.append('image', imageFile)
-  return apiPost('/chat', formData, true)
+  return withTimeout(apiPost('/chat', formData, true), 20000)
 }
 
 export async function sendAgentChat(message, imageFile = null) {

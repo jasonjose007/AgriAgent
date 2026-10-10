@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { T } from '../translations'
 
-export default function Login({ lang, onSwitch }) {
+export default function Login({ lang: initialLang, onSwitch }) {
+  const [lang, setLang] = useState(initialLang || 'en')
   const t = T[lang]
   const { login } = useAuth()
   const [phone, setPhone] = useState('')
@@ -26,7 +27,13 @@ export default function Login({ lang, onSwitch }) {
   return (
     <div className="min-h-screen bg-rice-paper flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 relative">
+          <button
+            onClick={() => setLang(l => l === 'en' ? 'ta' : 'en')}
+            className="absolute right-0 top-0 px-3 py-1.5 text-xs font-medium bg-turmeric/10 text-turmeric border border-turmeric/20 rounded-md hover:bg-turmeric/20 transition-colors"
+          >
+            {lang === 'en' ? 'தமிழ்' : 'English'}
+          </button>
           <div className="w-14 h-14 rounded-xl bg-paddy flex items-center justify-center text-white text-2xl font-display font-bold mx-auto mb-3">
             A
           </div>

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Header from './components/Header'
 import ChatPanel from './components/ChatPanel'
@@ -18,6 +18,11 @@ function Dashboard() {
   const [lang, setLang] = useState(user?.preferred_language === 'Tamil' ? 'ta' : 'en')
   const [view, setView] = useState('chat')
   const [showArch, setShowArch] = useState(false)
+
+  // Warm up the backend on page load to eliminate cold start delay
+  useEffect(() => {
+    fetch('/api/health').catch(() => {})
+  }, [])
   const [messages, setMessages] = useState([])
   const [trackerSteps, setTrackerSteps] = useState([])
   const [schemeCards, setSchemeCards] = useState([])

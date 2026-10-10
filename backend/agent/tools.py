@@ -7,6 +7,7 @@ without asking the farmer to repeat information.
 """
 
 import json
+import requests
 from datetime import datetime, timezone, timedelta
 
 from google import genai
@@ -15,6 +16,88 @@ from google.genai import types
 from data.schemes import AGRI_SCHEMES, SCHEME_CATEGORIES, MANDI_PRICES, WEATHER_DATA, SOIL_WEATHER_ADVISORY
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
+# Lat/lng for Tamil Nadu districts — used by Open-Meteo live weather API
+DISTRICT_COORDS = {
+    "thanjavur": (10.79, 79.13), "coimbatore": (11.01, 76.97),
+    "madurai": (9.92, 78.12), "tiruchirappalli": (10.79, 78.69),
+    "salem": (11.65, 78.16), "erode": (11.34, 77.73),
+    "tirunelveli": (8.73, 77.70), "chennai": (13.08, 80.27),
+    "kanchipuram": (12.83, 79.70), "vellore": (12.92, 79.13),
+    "dindigul": (10.37, 77.97), "cuddalore": (11.75, 79.77),
+    "nagapattinam": (10.77, 79.84), "theni": (10.01, 77.48),
+    "sivaganga": (10.13, 78.48),
+}
+
+
+def _fetch_live_weather(district_key: str) -> dict | None:
+    """Fetch real-time weather from Open-Meteo (free, no API key)."""
+    coords = DISTRICT_COORDS.get(district_key)
+    if not coords:
+        return None
+    lat, lng = coords
+    try:
+        resp = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat, "longitude": lng,
+                "current": "temperature_2m,relative_humidity_2m,rain,weather_code",
+                "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+                "timezone": "Asia/Kolkata",
+                "forecast_days": 3,
+            },
+            timeout=4,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        cur = data.get("current", {})
+        daily = data.get("daily", {})
+
+        wmo = cur.get("weather_code", 0)
+        condition = _wmo_to_text(wmo)
+
+        precip_3d = sum(daily.get("precipitation_sum", [0, 0, 0])[:3])
+        max_temps = daily.get("temperature_2m_max", [])
+        min_temps = daily.get("temperature_2m_min", [])
+        forecast_parts = []
+        for i in range(min(3, len(max_temps))):
+            d = daily.get("time", ["", "", ""])[i]
+            forecast_parts.append(f"{d}: {min_temps[i]}-{max_temps[i]}°C, {daily.get('precipitation_sum', [0]*(i+1))[i]}mm rain")
+
+        advisory = "Monitor crop conditions."
+        rain_mm = cur.get("rain", 0)
+        temp = cur.get("temperature_2m", 30)
+        if rain_mm > 5:
+            advisory = "Active rainfall — avoid pesticide spraying. Ensure field drainage."
+        elif temp > 36:
+            advisory = "High heat — irrigate early morning/evening. Use mulch to retain moisture."
+        elif precip_3d > 20:
+            advisory = "Heavy rain expected over 3 days. Prepare drainage and delay harvesting."
+
+        return {
+            "temperature_c": round(cur.get("temperature_2m", 0), 1),
+            "humidity_pct": round(cur.get("relative_humidity_2m", 0)),
+            "rainfall_mm": round(rain_mm, 1),
+            "condition": condition,
+            "forecast_3day": "; ".join(forecast_parts),
+            "advisory": advisory,
+            "data_source": "Live — Open-Meteo API (open-meteo.com)",
+        }
+    except Exception:
+        return None
+
+
+def _wmo_to_text(code: int) -> str:
+    if code == 0: return "Clear sky"
+    if code in (1, 2, 3): return "Partly cloudy"
+    if code in (45, 48): return "Foggy"
+    if code in (51, 53, 55): return "Drizzle"
+    if code in (61, 63, 65): return "Rainy"
+    if code in (71, 73, 75): return "Snowy"
+    if code in (80, 81, 82): return "Rain showers"
+    if code in (95, 96, 99): return "Thunderstorm"
+    return "Cloudy"
 
 
 def match_agri_schemes(crop_type: str, acreage: float, district: str, soil_type: str) -> dict:
@@ -108,10 +191,13 @@ def fetch_mandi_and_weather(district: str, commodity: str, soil_type: str = "") 
             "available_districts": list(MANDI_PRICES.keys()),
         }
 
+    # Try live weather first (Open-Meteo), fall back to hardcoded
+    live_weather = _fetch_live_weather(district_key)
+    weather = live_weather or WEATHER_DATA.get(district_key)
+
     if weather:
         result["weather"] = {**weather}
         if soil_lower and soil_lower in SOIL_WEATHER_ADVISORY:
-            condition = weather.get("condition", "").lower()
             soil_adv = SOIL_WEATHER_ADVISORY[soil_lower]
             if weather.get("rainfall_mm", 0) > 5:
                 result["weather"]["soil_advisory"] = soil_adv.get("rain", "")
@@ -120,7 +206,7 @@ def fetch_mandi_and_weather(district: str, commodity: str, soil_type: str = "") 
             else:
                 result["weather"]["soil_advisory"] = soil_adv.get("dry", "")
     else:
-        result["weather"] = {"error": f"No weather data for '{district}'.", "available_districts": list(WEATHER_DATA.keys())}
+        result["weather"] = {"error": f"No weather data for '{district}'.", "available_districts": list(DISTRICT_COORDS.keys())}
 
     return result
 

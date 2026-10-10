@@ -26,6 +26,10 @@ export const T = {
     suggestPrice: "What's the current price of turmeric in Erode?",
     suggestMulti: 'I grow coconut near Coimbatore. What subsidies and market price?',
     summaryTitle: 'What this means for you',
+    voiceInput: 'Speak your question',
+    stopListening: 'Stop listening',
+    listening: 'Listening... speak now',
+    readAloud: 'Read aloud',
     suggestDisease: 'My paddy leaves have brown spots. What disease could this be?',
   },
   ta: {
@@ -55,6 +59,10 @@ export const T = {
     suggestPrice: 'ஈரோட்டில் மஞ்சள் விலை என்ன?',
     suggestMulti: 'கோயம்புத்தூரில் தேங்காய் விவசாயம். மானியம் மற்றும் விலை?',
     summaryTitle: 'இதன் பொருள் என்ன',
+    voiceInput: 'குரல் மூலம் கேளுங்கள்',
+    stopListening: 'நிறுத்து',
+    listening: 'கேட்கிறேன்... பேசுங்கள்',
+    readAloud: 'படிக்கவும்',
     suggestDisease: 'நெல் இலைகளில் பழுப்பு புள்ளிகள் உள்ளன. என்ன நோய்?',
   },
 }

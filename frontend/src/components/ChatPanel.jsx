@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import { T } from '../translations'
 
@@ -7,12 +7,61 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
   const [input, setInput] = useState('')
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
+  const [isListening, setIsListening] = useState(false)
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
+  const recognitionRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
+
+  // --- Web Speech API setup ---
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) return
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = true
+    recognition.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results)
+        .map((r) => r[0].transcript)
+        .join('')
+      setInput(transcript)
+    }
+
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+
+    recognitionRef.current = recognition
+    return () => recognition.abort()
+  }, [lang])
+
+  const toggleVoice = useCallback(() => {
+    if (!recognitionRef.current) return
+    if (isListening) {
+      recognitionRef.current.stop()
+      setIsListening(false)
+    } else {
+      recognitionRef.current.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
+      recognitionRef.current.start()
+      setIsListening(true)
+    }
+  }, [isListening, lang])
+
+  // --- Read response aloud ---
+  const speakResponse = useCallback((text) => {
+    if (!window.speechSynthesis) return
+    window.speechSynthesis.cancel()
+    const clean = text.replace(/[#*_`\-|>]/g, '').replace(/\n+/g, '. ').slice(0, 800)
+    const utterance = new SpeechSynthesisUtterance(clean)
+    utterance.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
+    utterance.rate = 0.9
+    window.speechSynthesis.speak(utterance)
+  }, [lang])
 
   const handleImageSelect = (e) => {
     const file = e.target.files?.[0]
@@ -23,6 +72,7 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
 
   const clearImage = () => {
     setImageFile(null)
+    if (imagePreview) URL.revokeObjectURL(imagePreview)
     setImagePreview(null)
     if (fileRef.current) fileRef.current.value = ''
   }
@@ -31,6 +81,7 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
     e.preventDefault()
     const text = input.trim()
     if (!text && !imageFile) return
+    if (isListening) recognitionRef.current?.stop()
     onSend(text || 'Please analyze this crop image.', imageFile)
     setInput('')
     clearImage()
@@ -42,6 +93,8 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
   }
 
   const showWelcome = messages.length === 0
+  const hasVoice = typeof window !== 'undefined' &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition)
 
   return (
     <div className="w-[55%] flex flex-col border-r border-paddy-light/40">
@@ -95,6 +148,18 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
               {msg.role === 'agent' ? (
                 <div className="agent-markdown">
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  <button
+                    onClick={() => speakResponse(msg.content)}
+                    className="mt-2 flex items-center gap-1.5 text-xs text-ink-muted hover:text-paddy transition-colors"
+                    title="Read aloud"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                      <path d="M15.54 8.46a5 5 0 010 7.07" />
+                      <path d="M19.07 4.93a10 10 0 010 14.14" />
+                    </svg>
+                    {t.readAloud}
+                  </button>
                 </div>
               ) : (
                 <p className="leading-relaxed">{msg.content}</p>
@@ -142,6 +207,25 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </button>
+          {hasVoice && (
+            <button
+              type="button"
+              onClick={toggleVoice}
+              className={`p-2 rounded-md transition-colors ${
+                isListening
+                  ? 'bg-laterite/10 text-laterite animate-pulse'
+                  : 'text-ink-muted hover:text-paddy hover:bg-paddy-light/40'
+              }`}
+              title={isListening ? t.stopListening : t.voiceInput}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                <path d="M19 10v2a7 7 0 01-14 0v-2" />
+                <line x1="12" y1="19" x2="12" y2="23" />
+                <line x1="8" y1="23" x2="16" y2="23" />
+              </svg>
+            </button>
+          )}
           <input
             ref={fileRef}
             type="file"
@@ -153,9 +237,11 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={t.placeholder}
+            placeholder={isListening ? t.listening : t.placeholder}
             disabled={isLoading}
-            className="flex-1 px-3 py-2 text-sm border border-paddy-light/50 rounded-lg bg-white focus:outline-none focus:border-paddy/50 focus:ring-1 focus:ring-paddy/20 disabled:opacity-50 placeholder:text-ink-muted/60"
+            className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:border-paddy/50 focus:ring-1 focus:ring-paddy/20 disabled:opacity-50 placeholder:text-ink-muted/60 ${
+              isListening ? 'border-laterite/50 bg-laterite/5' : 'border-paddy-light/50'
+            }`}
           />
           <button
             type="submit"

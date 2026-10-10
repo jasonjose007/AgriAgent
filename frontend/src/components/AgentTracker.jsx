@@ -14,7 +14,7 @@ const TOOL_DESCRIPTIONS = {
   diagnose_crop_disease: 'Analyzing crop leaf image with Gemini Vision',
 }
 
-export default function AgentTracker({ steps, schemeCards, toolCalls, lang }) {
+export default function AgentTracker({ steps, schemeCards, toolCalls, agentReply, lang }) {
   const t = T[lang]
   const isIdle = steps.length === 0
   const allDone = steps.length > 0 && steps.every((s) => s.status === 'done')
@@ -43,8 +43,8 @@ export default function AgentTracker({ steps, schemeCards, toolCalls, lang }) {
           </div>
         ) : (
           <div className="space-y-5">
-            {allDone && toolCalls && toolCalls.length > 0 && (
-              <SummaryCard toolCalls={toolCalls} lang={lang} />
+            {allDone && (
+              <SummaryCard toolCalls={toolCalls} agentReply={agentReply} lang={lang} />
             )}
 
             <div className="tracker-timeline space-y-4">

@@ -172,7 +172,7 @@ class AgriAgent:
         This avoids event-loop conflicts between FastAPI/uvicorn and the
         google-genai SDK's synchronous HTTP client.
         """
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None,
             partial(_run_agent_sync, user_message, image_bytes, image_mime),

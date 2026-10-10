@@ -15,6 +15,7 @@ For the hackathon judges:
      a human-readable answer from the raw data.
 """
 
+import json
 from datetime import datetime, timezone, timedelta
 
 from google import genai
@@ -188,7 +189,6 @@ def diagnose_crop_disease(client: genai.Client, image_bytes: bytes, mime_type: s
         ],
     )
 
-    import json
     try:
         text = response.text.strip()
         if text.startswith("```"):

@@ -16,6 +16,15 @@ export default function SummaryCard({ toolCalls, agentReply, lang }) {
       if (tc.tool_name === 'fetch_mandi_and_weather') {
         sections.push(buildMarketSummary(tc.result))
       }
+      if (tc.tool_name === 'generate_official_draft') {
+        sections.push({
+          icon: '📄',
+          headline: `e-Seva draft ready: ${tc.result?.scheme?.name || 'scheme'}`,
+          body: `A pre-filled application draft has been generated for ${tc.result?.applicant?.name || 'you'} in ${tc.result?.applicant?.district || 'your district'}. Check the document checklist below and take it to your nearest e-Seva centre.`,
+          action: 'Scroll down to see the full draft with document checklist.',
+          warning: null,
+        })
+      }
     }
   } else if (agentReply) {
     sections.push(buildReplySummary(agentReply))

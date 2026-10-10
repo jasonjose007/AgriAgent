@@ -74,14 +74,15 @@ async def agent_chat(
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Agent error: {str(e)}")
 
-    log = AgentSessionLog(
-        user_id=user.id,
-        query_text=message,
-        tools_executed=[{"tool": t.tool_name, "args": t.arguments} for t in result.tool_calls],
-        final_output=result.reply[:2000],
-    )
-    db.add(log)
-    db.commit()
+    try:
+        db.add(AgentSessionLog(
+            user_id=user.id, query_text=message,
+            tools_executed=[{"tool": t.tool_name, "args": t.arguments} for t in result.tool_calls],
+            final_output=result.reply[:2000],
+        ))
+        db.commit()
+    except Exception:
+        pass
 
     return result
 
@@ -119,14 +120,15 @@ async def chat_public(
         raise HTTPException(status_code=502, detail=f"Agent error: {str(e)}")
 
     if user:
-        log = AgentSessionLog(
-            user_id=user.id,
-            query_text=message,
-            tools_executed=[{"tool": t.tool_name, "args": t.arguments} for t in result.tool_calls],
-            final_output=result.reply[:2000],
-        )
-        db.add(log)
-        db.commit()
+        try:
+            db.add(AgentSessionLog(
+                user_id=user.id, query_text=message,
+                tools_executed=[{"tool": t.tool_name, "args": t.arguments} for t in result.tool_calls],
+                final_output=result.reply[:2000],
+            ))
+            db.commit()
+        except Exception:
+            pass
 
     return result
 

@@ -193,7 +193,7 @@ def diagnose_crop_disease(client: genai.Client, image_bytes: bytes, mime_type: s
     )
 
     response = client.models.generate_content(
-        model="gemini-3.8-flash-lite",
+        model="gemini-3.5-flash-lite",
         contents=[types.Content(role="user", parts=[
             types.Part.from_text(text=prompt),
             types.Part.from_bytes(data=image_bytes, mime_type=mime_type),

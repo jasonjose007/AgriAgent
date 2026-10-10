@@ -8,80 +8,89 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
   const [imageFile, setImageFile] = useState(null)
   const [imagePreview, setImagePreview] = useState(null)
   const [isListening, setIsListening] = useState(false)
-  const [voiceError, setVoiceError] = useState('')
+  const [voiceStatus, setVoiceStatus] = useState('')
   const bottomRef = useRef(null)
   const fileRef = useRef(null)
   const recognitionRef = useRef(null)
-  const finalTranscriptRef = useRef('')
+  const autoStopTimer = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
-  // --- Web Speech API setup ---
-  useEffect(() => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) return
+  const stopListening = useCallback(() => {
+    if (autoStopTimer.current) clearTimeout(autoStopTimer.current)
+    try { recognitionRef.current?.stop() } catch {}
+    setIsListening(false)
+  }, [])
 
+  const toggleVoice = useCallback(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setVoiceStatus('Voice not supported. Use Chrome browser.')
+      return
+    }
+
+    if (isListening) {
+      stopListening()
+      setVoiceStatus('')
+      return
+    }
+
+    // Create fresh instance each time to avoid stale state
     const recognition = new SpeechRecognition()
-    recognition.continuous = false
+    recognition.continuous = true
     recognition.interimResults = true
     recognition.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
+    recognition.maxAlternatives = 1
+
+    recognition.onstart = () => {
+      setIsListening(true)
+      setVoiceStatus(lang === 'ta' ? 'கேட்கிறேன்...' : 'Listening...')
+    }
 
     recognition.onresult = (event) => {
-      let interim = ''
-      let final = ''
+      let transcript = ''
       for (let i = 0; i < event.results.length; i++) {
-        const t = event.results[i][0].transcript
-        if (event.results[i].isFinal) final += t
-        else interim += t
+        transcript += event.results[i][0].transcript
       }
-      const text = final || interim
-      setInput(text)
-      finalTranscriptRef.current = final
+      setInput(transcript)
+      setVoiceStatus(lang === 'ta' ? 'கேட்கிறேன்... பேசுங்கள்' : 'Listening... keep speaking')
     }
 
     recognition.onend = () => {
       setIsListening(false)
-      if (finalTranscriptRef.current.trim()) {
-        setInput(finalTranscriptRef.current.trim())
-      }
+      setVoiceStatus('')
+      if (autoStopTimer.current) clearTimeout(autoStopTimer.current)
     }
 
     recognition.onerror = (event) => {
       setIsListening(false)
-      if (event.error === 'not-allowed') {
-        setVoiceError('Microphone permission denied. Allow mic access and try again.')
-      } else if (event.error === 'no-speech') {
-        setVoiceError('No speech detected. Tap the mic and speak.')
-      } else {
-        setVoiceError('')
+      if (autoStopTimer.current) clearTimeout(autoStopTimer.current)
+      const errMap = {
+        'not-allowed': 'Mic blocked. Click the lock icon in the address bar and allow microphone.',
+        'no-speech': 'No speech heard. Tap the mic and speak clearly.',
+        'audio-capture': 'No microphone found. Check your device.',
+        'network': 'Network error. Check your connection.',
+        'aborted': '',
       }
+      setVoiceStatus(errMap[event.error] || `Mic error: ${event.error}`)
     }
 
     recognitionRef.current = recognition
-    return () => { try { recognition.abort() } catch {} }
-  }, [lang])
 
-  const toggleVoice = useCallback(() => {
-    if (!recognitionRef.current) return
-    setVoiceError('')
-    finalTranscriptRef.current = ''
-    if (isListening) {
-      recognitionRef.current.stop()
-      setIsListening(false)
-    } else {
-      recognitionRef.current.lang = lang === 'ta' ? 'ta-IN' : 'en-IN'
-      try {
-        recognitionRef.current.start()
-        setIsListening(true)
-      } catch {
-        setVoiceError('Mic busy. Wait a moment and try again.')
-      }
+    try {
+      recognition.start()
+      // Auto-stop after 15 seconds
+      autoStopTimer.current = setTimeout(() => {
+        stopListening()
+        setVoiceStatus('Auto-stopped after 15s. Tap mic to continue.')
+      }, 15000)
+    } catch (e) {
+      setVoiceStatus(`Could not start mic: ${e.message}`)
     }
-  }, [isListening, lang])
+  }, [isListening, lang, stopListening])
 
-  // --- Read response aloud ---
   const speakResponse = useCallback((text) => {
     if (!window.speechSynthesis) return
     window.speechSynthesis.cancel()
@@ -110,10 +119,11 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
     e.preventDefault()
     const text = input.trim()
     if (!text && !imageFile) return
-    if (isListening) recognitionRef.current?.stop()
+    stopListening()
     onSend(text || 'Please analyze this crop image.', imageFile)
     setInput('')
     clearImage()
+    setVoiceStatus('')
   }
 
   const handleSuggestion = (text) => {
@@ -122,8 +132,6 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
   }
 
   const showWelcome = messages.length === 0
-  const hasVoice = typeof window !== 'undefined' &&
-    (window.SpeechRecognition || window.webkitSpeechRecognition)
 
   return (
     <div className="w-[55%] flex flex-col border-r border-paddy-light/40">
@@ -168,11 +176,7 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
               }`}
             >
               {msg.image && (
-                <img
-                  src={msg.image}
-                  alt="Uploaded crop"
-                  className="w-48 rounded mb-2"
-                />
+                <img src={msg.image} alt="Uploaded crop" className="w-48 rounded mb-2" />
               )}
               {msg.role === 'agent' ? (
                 <div className="agent-markdown">
@@ -211,17 +215,17 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
       </div>
 
       <form onSubmit={handleSubmit} className="p-3 border-t border-paddy-light/30 bg-white/50">
-        {voiceError && (
-          <p className="text-xs text-laterite bg-laterite-light/50 rounded-lg px-3 py-1.5 mb-2">{voiceError}</p>
+        {voiceStatus && (
+          <p className={`text-xs rounded-lg px-3 py-1.5 mb-2 ${
+            voiceStatus.includes('Listening') || voiceStatus.includes('கேட்கிறேன்')
+              ? 'text-paddy bg-paddy-light/40 animate-pulse'
+              : 'text-laterite bg-laterite-light/50'
+          }`}>{voiceStatus}</p>
         )}
         {imagePreview && (
           <div className="mb-2 flex items-center gap-2">
             <img src={imagePreview} alt="Preview" className="h-14 rounded border border-paddy-light" />
-            <button
-              type="button"
-              onClick={clearImage}
-              className="text-xs text-laterite hover:underline"
-            >
+            <button type="button" onClick={clearImage} className="text-xs text-laterite hover:underline">
               Remove
             </button>
           </div>
@@ -239,25 +243,23 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
               <polyline points="21 15 16 10 5 21" />
             </svg>
           </button>
-          {hasVoice && (
-            <button
-              type="button"
-              onClick={toggleVoice}
-              className={`p-2 rounded-md transition-colors ${
-                isListening
-                  ? 'bg-laterite/10 text-laterite animate-pulse'
-                  : 'text-ink-muted hover:text-paddy hover:bg-paddy-light/40'
-              }`}
-              title={isListening ? t.stopListening : t.voiceInput}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                <path d="M19 10v2a7 7 0 01-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={toggleVoice}
+            className={`p-2 rounded-md transition-colors ${
+              isListening
+                ? 'bg-laterite/15 text-laterite animate-pulse'
+                : 'text-ink-muted hover:text-paddy hover:bg-paddy-light/40'
+            }`}
+            title={isListening ? t.stopListening : t.voiceInput}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+              <path d="M19 10v2a7 7 0 01-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          </button>
           <input
             ref={fileRef}
             type="file"
@@ -269,10 +271,12 @@ export default function ChatPanel({ messages, onSend, isLoading, lang }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isListening ? t.listening : t.placeholder}
+            placeholder={isListening ? (lang === 'ta' ? 'பேசுங்கள்...' : 'Speak now...') : t.placeholder}
             disabled={isLoading}
-            className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:border-paddy/50 focus:ring-1 focus:ring-paddy/20 disabled:opacity-50 placeholder:text-ink-muted/60 ${
-              isListening ? 'border-laterite/50 bg-laterite/5' : 'border-paddy-light/50'
+            className={`flex-1 px-3 py-2 text-sm border rounded-lg bg-white focus:outline-none focus:ring-1 disabled:opacity-50 placeholder:text-ink-muted/60 ${
+              isListening
+                ? 'border-laterite/50 bg-laterite/5 focus:border-laterite/50 focus:ring-laterite/20'
+                : 'border-paddy-light/50 focus:border-paddy/50 focus:ring-paddy/20'
             }`}
           />
           <button

@@ -5,6 +5,22 @@ function authHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+async function parseResponse(res) {
+  const text = await res.text()
+  if (!text) {
+    if (!res.ok) throw new Error(`Server error (${res.status})`)
+    return {}
+  }
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch {
+    throw new Error(`Invalid response from server`)
+  }
+  if (!res.ok) throw new Error(data.detail || `Error ${res.status}`)
+  return data
+}
+
 export async function apiPost(path, body, isForm = false) {
   const opts = { method: 'POST', headers: { ...authHeaders() } }
   if (isForm) {
@@ -14,16 +30,12 @@ export async function apiPost(path, body, isForm = false) {
     opts.body = JSON.stringify(body)
   }
   const res = await fetch(`${BASE}${path}`, opts)
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.detail || `Error ${res.status}`)
-  return data
+  return parseResponse(res)
 }
 
 export async function apiGet(path) {
   const res = await fetch(`${BASE}${path}`, { headers: authHeaders() })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.detail || `Error ${res.status}`)
-  return data
+  return parseResponse(res)
 }
 
 export async function apiPut(path, body) {
@@ -32,9 +44,7 @@ export async function apiPut(path, body) {
     headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body),
   })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.detail || `Error ${res.status}`)
-  return data
+  return parseResponse(res)
 }
 
 export async function registerUser(formData) {

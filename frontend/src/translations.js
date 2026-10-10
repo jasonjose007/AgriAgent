@@ -25,6 +25,7 @@ export const T = {
     suggestScheme: 'I grow rice on 4 acres in Thanjavur. What schemes am I eligible for?',
     suggestPrice: "What's the current price of turmeric in Erode?",
     suggestMulti: 'I grow coconut near Coimbatore. What subsidies and market price?',
+    summaryTitle: 'What this means for you',
     suggestDisease: 'My paddy leaves have brown spots. What disease could this be?',
   },
   ta: {
@@ -53,6 +54,7 @@ export const T = {
     suggestScheme: 'தஞ்சாவூரில் 4 ஏக்கரில் நெல் பயிரிடுகிறேன். என்ன திட்டங்கள் கிடைக்கும்?',
     suggestPrice: 'ஈரோட்டில் மஞ்சள் விலை என்ன?',
     suggestMulti: 'கோயம்புத்தூரில் தேங்காய் விவசாயம். மானியம் மற்றும் விலை?',
+    summaryTitle: 'இதன் பொருள் என்ன',
     suggestDisease: 'நெல் இலைகளில் பழுப்பு புள்ளிகள் உள்ளன. என்ன நோய்?',
   },
 }

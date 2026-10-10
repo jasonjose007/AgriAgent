@@ -1,4 +1,5 @@
 import { T } from '../translations'
+import SummaryCard from './SummaryCard'
 import SchemeCard from './SchemeCard'
 
 const TOOL_LABELS = {
@@ -13,9 +14,10 @@ const TOOL_DESCRIPTIONS = {
   diagnose_crop_disease: 'Analyzing crop leaf image with Gemini Vision',
 }
 
-export default function AgentTracker({ steps, schemeCards, lang }) {
+export default function AgentTracker({ steps, schemeCards, toolCalls, lang }) {
   const t = T[lang]
   const isIdle = steps.length === 0
+  const allDone = steps.length > 0 && steps.every((s) => s.status === 'done')
 
   return (
     <div className="w-[45%] flex flex-col bg-paddy-pale/30">
@@ -41,6 +43,10 @@ export default function AgentTracker({ steps, schemeCards, lang }) {
           </div>
         ) : (
           <div className="space-y-5">
+            {allDone && toolCalls && toolCalls.length > 0 && (
+              <SummaryCard toolCalls={toolCalls} lang={lang} />
+            )}
+
             <div className="tracker-timeline space-y-4">
               {steps.map((step) => (
                 <div key={step.id} className="relative step-enter">

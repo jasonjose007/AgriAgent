@@ -15,6 +15,7 @@ export default function App() {
   const [messages, setMessages] = useState([])
   const [trackerSteps, setTrackerSteps] = useState([])
   const [schemeCards, setSchemeCards] = useState([])
+  const [rawToolCalls, setRawToolCalls] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const t = T[lang]
 
@@ -66,6 +67,7 @@ export default function App() {
     setIsLoading(true)
     setTrackerSteps([])
     setSchemeCards([])
+    setRawToolCalls([])
 
     let data
     try {
@@ -78,6 +80,7 @@ export default function App() {
     await animateSteps(data.tool_calls || [])
 
     setMessages((prev) => [...prev, { role: 'agent', content: data.reply }])
+    setRawToolCalls(data.tool_calls || [])
 
     const schemes = (data.tool_calls || [])
       .filter((tc) => tc.tool_name === 'match_agri_schemes')
@@ -105,6 +108,7 @@ export default function App() {
         <AgentTracker
           steps={trackerSteps}
           schemeCards={schemeCards}
+          toolCalls={rawToolCalls}
           lang={lang}
         />
       </main>
